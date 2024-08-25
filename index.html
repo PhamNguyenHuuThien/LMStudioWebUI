@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>LM Studio Chat</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css" />
+  <style>
+    :root {
+      --background-color: #1e0a3c;
+      --text-color: #ffffff;
+      --input-background: #2c0f4b;
+      --user-message-color: #6c2d8c;
+      --assistant-message-color: #442a6f;
+      --button-color: #8e44ad;
+      --accent-color: #bb86fc;
+      --border-radius: 8px;
+      --transition-speed: 0.3s;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    * { box-sizing: border-box; }
+    body, html { font-family: 'Inter', sans-serif; margin: 0; padding: 0; height: 100%; background-color: var(--background-color); color: var(--text-color);}
+    #app { display: flex; flex-direction: column; height: 100%; }
+    #server-url-container { padding: 0.75rem; background-color: var(--input-background); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; box-shadow: var(--shadow);}
+    #server-url { flex-grow: 1; padding: 0.5rem 0.75rem; margin-right: 0.5rem; margin-bottom: 0.5rem; border: none; border-radius: var(--border-radius); background-color: var(--background-color); color: var(--text-color); font-size: 0.95rem;}
+    #model-select { padding: 0.5rem; font-size: 0.95rem; margin-right: 0.5rem; border: none; border-radius: var(--border-radius); background-color: var(--background-color); color: var(--text-color);}
+    #connect-button, #stop-button { padding: 0.55rem 1rem; background-color: var(--button-color); color: var(--text-color); border: none; border-radius: var(--border-radius); cursor: pointer; font-size: 0.95rem; transition: background-color var(--transition-speed);}
+    #connect-button:hover, #stop-button:hover { background-color: var(--accent-color); }
+    #stop-button { margin-left: 8px; display: none; }
+    #connection-status { width: 100%; text-align: center; padding: 0.5rem; font-size: 0.85rem; background-color: var(--input-background); color: #ddd;}
+    #main-content { display: flex; flex-grow: 1; overflow: hidden; }
+    #chat-sidebar { width: 250px; background-color: var(--input-background); border-right: 1px solid #333; overflow: hidden; transition: width var(--transition-speed) ease; position: relative; flex-shrink: 0;}
+    #chat-sidebar.collapsed { width: 40px; }
+    #toggle-sidebar { position: absolute; top: 10px; right: 10px; background-color: var(--button-color); border: none; border-radius: 50%; width: 30px; height: 30px; color: var(--text-color); cursor: pointer; transition: background-color var(--transition-speed); z-index: 10;}
+    #toggle-sidebar:hover { background-color: var(--accent-color); }
+    .sidebar-content { padding: 1rem; transition: opacity var(--transition-speed) ease;}
+    #chat-sidebar.collapsed .sidebar-content { opacity: 0; pointer-events: none;}
+    #chat-sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600;}
+    #new-chat-button { width: 100%; padding: 0.5rem; border: none; border-radius: var(--border-radius); background-color: var(--button-color); color: var(--text-color); cursor: pointer; margin-bottom: 1rem; transition: background-color var(--transition-speed); font-size: 0.9rem;}
+    #new-chat-button:hover { background-color: var(--accent-color); }
+    #chat-list { list-style: none; padding: 0; margin: 0; }
+    #chat-list li { padding: 0.75rem; border-radius: var(--border-radius); margin-bottom: 0.5rem; background-color: var(--background-color); cursor: pointer; transition: background-color var(--transition-speed); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; position: relative;}
+    #chat-list li:hover { background-color: var(--input-background);}
+    #chat-list li.active { background-color: var(--button-color); font-weight: 600; }
+    #context-menu { display: none; position: absolute; background-color: var(--button-color); color: var(--text-color); padding: 0.5rem; border-radius: 4px; z-index: 1000; cursor: pointer; font-size: 0.9rem;}
+    #chat-section { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; background: linear-gradient(135deg, #2c0f4b, #1e0a3c); padding: 1rem; border-radius: 10px; margin: 1rem;}
+    #chat-container { flex-grow: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 8px;}
+    .message { max-width: 85%; padding: 0.75rem 1rem; border-radius: var(--border-radius); word-wrap: break-word; font-size: 0.95rem; line-height: 1.5; background-color: var(--assistant-message-color); box-shadow: var(--shadow); animation: fadeIn 0.3s ease;}
+    .user-message { align-self: flex-end; background-color: var(--user-message-color);}
+    .assistant-message { align-self: flex-start; background-color: var(--assistant-message-color);}
+    .message-header { font-weight: 600; margin-bottom: 0.35rem; font-size: 0.85rem;}
+    .message-model { font-size: 0.75rem; color: #ccc; margin-bottom: 0.35rem;}
+    .message-content { margin-bottom: 0.5rem; }
+    .message-metrics { font-size: 0.75rem; color: #ccc; text-align: right; }
+    .message-content h1, .message-content h2, .message-content h3, .message-content h4, .message-content h5, .message-content h6 { margin: 0.5rem 0; font-weight: 600;}
+    .message-content p { margin: 0.5rem 0; line-height: 1.6; }
+    .message-content code { background-color: rgba(27,31,35,0.15); padding: 0.2em 0.4em; border-radius: 4px; font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;}
+    .message-content pre { background-color: #282c34; color: #abb2bf; padding: 0.8rem; overflow-x: auto; border-radius: 6px; margin: 0.5rem 0;}
+    .message-content blockquote { border-left: 4px solid var(--button-color); margin: 1rem 0; padding: 0.5rem 1rem; color: #ccc; background: rgba(142,68,173,0.1);}
+    #input-container { padding: 0.75rem; background-color: rgba(44,15,75,0.8); border-top: 1px solid #333; display: flex; align-items: center; gap: 0.5rem; box-shadow: var(--shadow); border-radius: 10px;}
+    #upload-button { background-color: var(--button-color); color: var(--text-color); border: none; border-radius: 50%; width: 2.75rem; height: 2.75rem; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: background-color var(--transition-speed);}
+    #upload-button:hover { background-color: var(--accent-color);}
+    #image-preview { display: none; max-width: 50px; }
+    #user-input { flex-grow: 1; padding: 0.6rem 0.75rem; border: none; border-radius: var(--border-radius); background-color: var(--background-color); color: var(--text-color); font-size: 0.95rem;}
+    #user-input::placeholder { color: #bbb;}
+    #send-button { background-color: var(--button-color); color: var(--text-color); border: none; border-radius: 50%; width: 2.75rem; height: 2.75rem; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: background-color var(--transition-speed);}
+    #send-button:hover { background-color: var(--accent-color);}
+    @media (max-width: 480px) {
+      .message { max-width: 90%; }
+      #server-url-container { flex-direction: column; align-items: stretch;}
+      #server-url, #connect-button, #model-select, #stop-button { width: 100%; margin-right: 0; margin-bottom: 0.5rem;}
+      #chat-sidebar { display: none;}
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px);}
+      to { opacity: 1; transform: translateY(0);}
+    }
+    .copy-btn { position: absolute; top: 5px; right: 5px; background-color: var(--accent-color); color: var(--text-color); border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; padding: 2px 6px; opacity: 0.8; transition: opacity 0.2s;}
+    .copy-btn:hover { opacity: 1;}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+      smartypants: true,
+      headerIds: false,
+      highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+          return hljs.highlight(code, { language: lang }).value;
+        }
+        return code;
+      }
+    });
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        packages: {'[+]': ['noerrors', 'noundefined']}
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+        ignoreHtmlClass: 'tex2jax_ignore',
+        processHtmlClass: 'tex2jax_process'
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+  <div id="app">
+    <div id="server-url-container">
+      <input type="text" id="server-url" placeholder="Enter LM Studio server address" value="http://10.20.95.19:1234" />
+      <select id="model-select" disabled>
+        <option value="">Select a model</option>
+      </select>
+      <button id="connect-button"><i class="fas fa-plug"></i> Connect</button>
+      <button id="stop-button"><i class="fas fa-stop"></i> Stop</button>
+    </div>
+    <div id="connection-status">Disconnected</div>
+    <div id="main-content">
+      <div id="chat-sidebar">
+        <button id="toggle-sidebar"><i class="fas fa-bars"></i></button>
+        <div class="sidebar-content">
+          <div id="chat-sidebar-header"><span>Chats</span></div>
+          <button id="new-chat-button"><i class="fas fa-plus"></i> New Chat</button>
+          <ul id="chat-list"></ul>
+        </div>
+      </div>
+      <div id="chat-section">
+        <div id="chat-container"></div>
+        <div id="input-container">
+          <button id="upload-button"><i class="fas fa-image"></i></button>
+          <input type="file" id="image-upload" accept="image/*" style="display:none;" />
+          <div id="image-preview"></div>
+          <input type="text" id="user-input" placeholder="Type a message..." disabled />
+          <button id="send-button"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="context-menu">Delete Chat</div>
+  <script>
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const serverUrlInput = document.getElementById('server-url');
+    const connectButton = document.getElementById('connect-button');
+    const stopButton = document.getElementById('stop-button');
+    const connectionStatus = document.getElementById('connection-status');
+    const sendButton = document.getElementById('send-button');
+    const newChatButton = document.getElementById('new-chat-button');
+    const toggleSidebarButton = document.getElementById('toggle-sidebar');
+    const chatSidebar = document.getElementById('chat-sidebar');
+    const chatList = document.getElementById('chat-list');
+    const contextMenu = document.getElementById('context-menu');
+    const modelSelect = document.getElementById('model-select');
+    const uploadButton = document.getElementById('upload-button');
+    const imageUpload = document.getElementById('image-upload');
+    const imagePreview = document.getElementById('image-preview');
+    let isConnected = false;
+    let currentModel = '';
+    let pendingImage = null;
+    let chats = [];
+    let currentChat = null;
+    let abortController = null;
+    function attachCopyButtons(container) {
+      container.querySelectorAll('pre').forEach(pre => {
+        if (!pre.querySelector('.copy-btn')) {
+          pre.style.position = 'relative';
+          const button = document.createElement('button');
+          button.className = 'copy-btn';
+          button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+          button.addEventListener('click', () => {
+            const codeText = pre.querySelector('code').innerText;
+            navigator.clipboard.writeText(codeText)
+              .then(() => {
+                button.innerText = "Copied!";
+                setTimeout(() => {
+                  button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+                }, 2000);
+              });
+          });
+          pre.appendChild(button);
+        }
+      });
+    }
+    function addMessage(content, isUser, metrics = null, store = true) {
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('message', isUser ? 'user-message' : 'assistant-message');
+      const headerDiv = document.createElement('div');
+      headerDiv.classList.add('message-header');
+      headerDiv.textContent = isUser ? 'You' : 'Assistant';
+      messageDiv.appendChild(headerDiv);
+      if (!isUser && currentModel) {
+        const modelDiv = document.createElement('div');
+        modelDiv.classList.add('message-model');
+        modelDiv.textContent = currentModel;
+        messageDiv.appendChild(modelDiv);
+      }
+      const contentDiv = document.createElement('div');
+      contentDiv.classList.add('message-content');
+      contentDiv.innerHTML = marked.parse(content);
+      messageDiv.appendChild(contentDiv);
+      if (metrics) {
+        const metricsDiv = document.createElement('div');
+        metricsDiv.classList.add('message-metrics');
+        metricsDiv.textContent = metrics;
+        messageDiv.appendChild(metricsDiv);
+      }
+      chatContainer.appendChild(messageDiv);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      messageDiv.querySelectorAll('pre code').forEach(block => {
+        hljs.highlightElement(block);
+      });
+      if (typeof MathJax !== 'undefined') {
+        MathJax.typesetPromise([messageDiv]).catch(err => {});
+      }
+      attachCopyButtons(messageDiv);
+      if (store && currentChat) {
+        currentChat.messages.push({ content, isUser, metrics, isImage: false });
+      }
+    }
+    function addImageMessage(dataURL, promptText) {
+      addMessage(`<img src="${dataURL}" style="max-width:100%; border-radius: var(--border-radius);" />`, true);
+      const lastMsg = currentChat.messages[currentChat.messages.length - 1];
+      lastMsg.isImage = true;
+      lastMsg.imageData = dataURL;
+      lastMsg.text = promptText;
+    }
+    function createNewChat() {
+      const chatId = Date.now();
+      const newChat = { id: chatId, name: `Conversation ${chats.length + 1}`, messages: [] };
+      chats.push(newChat);
+      currentChat = newChat;
+      updateChatList();
+      chatContainer.innerHTML = '';
+    }
+    function updateChatList() {
+      chatList.innerHTML = '';
+      chats.forEach(chat => {
+        const li = document.createElement('li');
+        li.textContent = chat.name;
+        li.dataset.chatId = chat.id;
+        if (currentChat && chat.id === currentChat.id) li.classList.add('active');
+        li.addEventListener('click', () => {
+          if (currentChat && chat.id === currentChat.id) return;
+          currentChat = chat;
+          loadChat(chat);
+          updateChatList();
+        });
+        li.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          showContextMenu(e.pageX, e.pageY, chat.id);
+        });
+        chatList.appendChild(li);
+      });
+    }
+    function loadChat(chat) {
+      chatContainer.innerHTML = '';
+      chat.messages.forEach(message => {
+        addMessage(message.content, message.isUser, message.metrics, false);
+      });
+    }
+    function showContextMenu(x, y, chatId) {
+      contextMenu.style.left = x + "px";
+      contextMenu.style.top = y + "px";
+      contextMenu.style.display = "block";
+      contextMenu.onclick = () => {
+        deleteChat(chatId);
+        hideContextMenu();
+      };
+    }
+    function hideContextMenu() { contextMenu.style.display = "none"; }
+    document.addEventListener('click', () => { if (contextMenu.style.display === "block") hideContextMenu(); });
+    function deleteChat(chatId) {
+      chats = chats.filter(c => c.id != chatId);
+      if (currentChat && currentChat.id == chatId) {
+        currentChat = chats.length > 0 ? chats[0] : null;
+        if (!currentChat) createNewChat();
+        else loadChat(currentChat);
+      }
+      updateChatList();
+    }
+    async function ejectCurrentModel(oldModel) {
+      const serverUrl = serverUrlInput.value.trim();
+      try {
+        await fetch(`${serverUrl}/v1/model/eject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: oldModel })
+        });
+      } catch (error) {}
+    }
+    function buildConversationHistory() {
+      const systemPrompt = currentChat.messages.some(msg => msg.isImage)
+        ? "You are an AI assistant that analyzes images."
+        : "You are an intelligent assistant. You always provide well-reasoned answers that are both correct and helpful.";
+      const history = [{ role: 'system', content: systemPrompt }];
+      currentChat.messages.forEach(msg => {
+        if (msg.isImage) {
+          history.push({
+            role: msg.isUser ? 'user' : 'assistant',
+            content: [
+              { type: "text", text: msg.text || "What's in this image?" },
+              { type: "image_url", image_url: { url: msg.imageData } }
+            ]
+          });
+        } else {
+          history.push({ role: msg.isUser ? 'user' : 'assistant', content: msg.content });
+        }
+      });
+      return history;
+    }
+    modelSelect.addEventListener('change', async (e) => {
+      const newModel = e.target.value;
+      if (currentModel && currentModel !== newModel) {
+        modelSelect.disabled = true;
+        await ejectCurrentModel(currentModel);
+      }
+      currentModel = newModel;
+      modelSelect.disabled = false;
+    });
+    async function connectToServer() {
+      const serverUrl = serverUrlInput.value.trim();
+      if (!serverUrl) {
+        updateConnectionStatus('Please enter a valid server address', false);
+        return;
+      }
+      try {
+        updateConnectionStatus('Connecting...', false);
+        const response = await fetch(`${serverUrl}/v1/models`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error('Server response was not ok');
+        const data = await response.json();
+        if (data && data.data && data.data.length > 0) {
+          modelSelect.innerHTML = "";
+          data.data.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.id;
+            modelSelect.appendChild(option);
+          });
+          modelSelect.disabled = false;
+          currentModel = modelSelect.value;
+          isConnected = true;
+          updateConnectionStatus('Connected', true);
+          userInput.disabled = false;
+          sendButton.disabled = false;
+          if (!currentChat) createNewChat();
+          addMessage('Connected to LM Studio server. You can start chatting now!', false, null, false);
+        } else {
+          throw new Error('No models available');
+        }
+      } catch (error) {
+        updateConnectionStatus('Failed to connect', false);
+        addMessage('Error: Unable to connect to the LM Studio server. Please check the address and try again.', false);
+      }
+    }
+    function updateConnectionStatus(message, connected) {
+      connectionStatus.textContent = message;
+      connectionStatus.style.color = connected ? 'var(--accent-color)' : '#f44336';
+      connectButton.textContent = connected ? 'Disconnect' : 'Connect';
+      serverUrlInput.disabled = connected;
+      userInput.disabled = !connected;
+      sendButton.disabled = !connected;
+    }
+    async function sendMessage() {
+      let message = userInput.value.trim();
+      if (!message && !pendingImage) return;
+      if (abortController) abortController.abort();
+      abortController = new AbortController();
+      stopButton.style.display = "inline-block";
+      let stopCalled = false;
+      stopButton.onclick = function() {
+        if (abortController) abortController.abort();
+        stopButton.style.display = "none";
+        stopCalled = true;
+      }
+      if (pendingImage) {
+        let promptText = message || "What's in this image?";
+        addImageMessage(pendingImage, promptText);
+        pendingImage = null;
+        imagePreview.style.display = "none";
+        userInput.value = "";
+      } else {
+        addMessage(message, true);
+      }
+      const conversationHistory = buildConversationHistory();
+      const assistantMessageElement = document.createElement('div');
+      assistantMessageElement.classList.add('message', 'assistant-message');
+      const headerDiv = document.createElement('div');
+      headerDiv.classList.add('message-header');
+      headerDiv.textContent = 'Assistant';
+      assistantMessageElement.appendChild(headerDiv);
+      if (currentModel) {
+        const modelDiv = document.createElement('div');
+        modelDiv.classList.add('message-model');
+        modelDiv.textContent = currentModel;
+        assistantMessageElement.appendChild(modelDiv);
+      }
+      const assistantContentDiv = document.createElement('div');
+      assistantContentDiv.classList.add('message-content');
+      assistantMessageElement.appendChild(assistantContentDiv);
+      chatContainer.appendChild(assistantMessageElement);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      userInput.value = '';
+      userInput.disabled = true;
+      sendButton.disabled = true;
+      const serverUrl = serverUrlInput.value.trim();
+      let accumulatedText = '';
+      try {
+        const response = await fetch(`${serverUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: currentModel,
+            messages: conversationHistory,
+            temperature: 0.7,
+            max_tokens: -1,
+            stream: true
+          }),
+          signal: abortController.signal
+        });
+        if (!response.ok) throw new Error('Server response was not ok');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+              if (line.startsWith("data:")) {
+                const dataStr = line.slice(5).trim();
+                if (dataStr === "[DONE]") { done = true; break; }
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  const delta = parsed.choices[0].delta;
+                  if (delta && delta.content) {
+                    accumulatedText += delta.content;
+                    assistantContentDiv.innerHTML = marked.parse(accumulatedText);
+                    assistantMessageElement.querySelectorAll('pre code').forEach(block => {
+                      hljs.highlightElement(block);
+                    });
+                    attachCopyButtons(assistantMessageElement);
+                    if (typeof MathJax !== 'undefined') {
+                      MathJax.typesetPromise([assistantMessageElement]).catch(err => {});
+                    }
+                  }
+                } catch (err) {}
+              }
+            }
+          }
+        }
+        if (currentChat) {
+          currentChat.messages.push({ content: accumulatedText, isUser: false, isImage: false });
+          if (currentChat.name.startsWith('Conversation')) {
+            const snippet = accumulatedText.split(' ').slice(0, 7).join(' ');
+            currentChat.name = snippet ? `Conversation: ${snippet}...` : currentChat.name;
+            updateChatList();
+          }
+        }
+      } catch (error) {
+        if (!stopCalled) {
+          addMessage('Error: Unable to get a response from the server. Please try again.', false);
+          isConnected = false;
+          updateConnectionStatus('Disconnected', false);
+        }
+      } finally {
+        userInput.disabled = false;
+        sendButton.disabled = false;
+        stopButton.style.display = "none";
+        userInput.focus();
+      }
+    }
+    uploadButton.addEventListener('click', () => { imageUpload.click(); });
+    imageUpload.addEventListener('change', () => {
+      const file = imageUpload.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        pendingImage = e.target.result;
+        imagePreview.innerHTML = `<img src="${pendingImage}" style="max-width:100%; border-radius: var(--border-radius);" />`;
+        imagePreview.style.display = "block";
+      };
+      reader.readAsDataURL(file);
+      imageUpload.value = "";
+    });
+    userInput.addEventListener('paste', function (e) {
+      if (e.clipboardData && e.clipboardData.items) {
+        for (let i = 0; i < e.clipboardData.items.length; i++) {
+          let item = e.clipboardData.items[i];
+          if (item.type.indexOf('image') !== -1) {
+            let file = item.getAsFile();
+            let reader = new FileReader();
+            reader.onload = function(event) {
+              pendingImage = event.target.result;
+              imagePreview.innerHTML = `<img src="${pendingImage}" style="max-width:100%; border-radius: var(--border-radius);" />`;
+              imagePreview.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+            e.preventDefault();
+            break;
+          }
+        }
+      }
+    });
+    connectButton.addEventListener('click', () => {
+      if (isConnected) {
+        isConnected = false;
+        updateConnectionStatus('Disconnected', false);
+        userInput.disabled = true;
+        sendButton.disabled = true;
+        addMessage('Disconnected from LM Studio server.', false);
+        currentModel = '';
+        modelSelect.disabled = true;
+      } else {
+        connectToServer();
+      }
+    });
+    userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+    sendButton.addEventListener('click', sendMessage);
+    newChatButton.addEventListener('click', () => { createNewChat(); });
+    toggleSidebarButton.addEventListener('click', () => { chatSidebar.classList.toggle('collapsed'); });
+    serverUrlInput.focus();
+
+    window.addEventListener('DOMContentLoaded', () => {
+      connectToServer();
+    });
+  </script>
+</body>
+</html>
